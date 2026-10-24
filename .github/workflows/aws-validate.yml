@@ -8,6 +8,18 @@ permissions:
   contents: read
 
 jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CloudFormation linter
+        run: python3 -m pip install cfn-lint==1.58.0
+      - name: Validate infrastructure without creating AWS resources
+        run: |
+          cfn-lint deploy/aws/ec2.yaml
+          bash -n deploy/aws/provision.sh
+          python3 -m unittest discover -s tests -p 'test_aws_provision.py'
   build-and-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30

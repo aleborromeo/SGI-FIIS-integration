@@ -2,6 +2,8 @@
 
 Configuración preparada para un entorno académico compartido con tráfico bajo. Una instancia ejecuta PostgreSQL 15, la API Java 17, el frontend y Caddy. El equipo utiliza una URL; la administración del servidor se reserva a los responsables designados.
 
+Para crear la instancia y la red mediante AWS CLI, use la [ruta por comandos desde CloudShell](CLI.md), que automatiza los pasos 2 y 3. Esta guía continúa sirviendo para recuperar los datos y publicar la URL.
+
 ## 1. Comprobar la cuenta y el crédito
 
 En AWS abra **Billing and Cost Management → Free Tier / Credits** y confirme el plan, saldo y vencimiento. Para cuentas nuevas desde el 15 de julio de 2025, el Free account plan ofrece USD 100 iniciales, hasta USD 100 adicionales por actividades y una duración máxima de seis meses, o hasta agotar el crédito. El Paid plan puede facturar cuando se agota el crédito. La etiqueta de instancia elegible no significa consumo ilimitado ni un servidor gratuito permanente.
