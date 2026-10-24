@@ -1,0 +1,81 @@
+name: Validate AWS deployment
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Create isolated test configuration
+        run: python3 deploy/aws/config.py init --mode fresh
+      - name: Validate shell and Compose configuration
+        run: |
+          for script in deploy/aws/*.sh; do bash -n "$script"; done
+          python3 deploy/aws/config.py validate
+          docker compose --env-file .env.aws -f docker-compose.aws.yml config --quiet
+      - name: Build API including Java test compilation
+        run: docker compose --env-file .env.aws -f docker-compose.aws.yml build api
+      - name: Build frontend with production TypeScript checks
+        run: docker compose --env-file .env.aws -f docker-compose.aws.yml build web
+      - name: Start stack and check routes
+        run: |
+          bash deploy/aws/start.sh
+          python3 - <<'PY'
+          import json
+          from urllib.request import Request, urlopen
+          with urlopen('http://localhost/health', timeout=20) as response:
+              assert json.load(response)['database'] == 'CONNECTED'
+          with urlopen('http://localhost/login', timeout=20) as response:
+              assert '<html' in response.read().decode().lower()
+          with urlopen('http://localhost/api/v1/auth/public-stats', timeout=20) as response:
+              assert isinstance(json.load(response), dict)
+          request = Request('http://localhost/api/v1/auth/login',
+                            data=json.dumps({'email': 'admin@unas.edu.pe', 'password': '00000000'}).encode(),
+                            headers={'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'})
+          with urlopen(request, timeout=20) as response:
+              assert json.load(response).get('token'), 'No se recibio un JWT al iniciar sesion'
+          print('API, PostgreSQL, SPA y login comprobados en el entorno de CI.')
+          PY
+      - name: Verify demo account setup
+        run: |
+          temporary_password="$(openssl rand -hex 12)"
+          printf 'admin@unas.edu.pe\n%s\n%s\n' "$temporary_password" "$temporary_password" | bash deploy/aws/secure-demo.sh --fresh-install
+          TEST_PASSWORD="$temporary_password" python3 - <<'PY'
+          import json, os
+          from urllib.request import Request, urlopen
+          request = Request('http://localhost/api/v1/auth/login',
+                            data=json.dumps({'email': 'admin@unas.edu.pe', 'password': os.environ['TEST_PASSWORD']}).encode(),
+                            headers={'Content-Type': 'application/json'})
+          with urlopen(request, timeout=20) as response:
+              assert json.load(response).get('token')
+          print('Login con la nueva clave temporal comprobado.')
+          PY
+      - name: Verify backup and restore into separate volumes
+        run: |
+          docker compose --env-file .env.aws -f docker-compose.aws.yml exec -T api sh -c 'printf "backup-probe\n" > /app/uploads-fiis/backup-probe.txt'
+          bash deploy/aws/backup.sh
+          backup_dir="$(python3 -c 'from pathlib import Path; print(sorted(Path("backups").iterdir())[-1])')"
+          docker compose --env-file .env.aws -f docker-compose.aws.yml down
+          sed -i 's/^DATA_MODE=fresh$/DATA_MODE=restore/' .env.aws
+          COMPOSE_PROJECT_NAME=sgi-fiis-restore-ci bash deploy/aws/restore.sh "$backup_dir"
+          COMPOSE_PROJECT_NAME=sgi-fiis-restore-ci bash deploy/aws/start.sh
+          docker compose --project-name sgi-fiis-restore-ci --env-file .env.aws -f docker-compose.aws.yml exec -T api grep -qx backup-probe /app/uploads-fiis/backup-probe.txt
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env.aws -f docker-compose.aws.yml logs --tail=120
+          docker compose --project-name sgi-fiis-restore-ci --env-file .env.aws -f docker-compose.aws.yml logs --tail=120
+      - name: Stop isolated test stack
+        if: always()
+        run: |
+          docker compose --env-file .env.aws -f docker-compose.aws.yml down --volumes
+          docker compose --project-name sgi-fiis-restore-ci --env-file .env.aws -f docker-compose.aws.yml down --volumes
