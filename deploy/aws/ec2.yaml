@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SGI-FIIS - one Ubuntu EC2 instance with a dedicated public network.
+
+Parameters:
+  ImageId:
+    Type: AWS::EC2::Image::Id
+  RootDeviceName:
+    Type: String
+    Default: /dev/sda1
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+  SshCidr:
+    Type: String
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/32$'
+    Description: One administrator IPv4 address only.
+  SshPublicKey:
+    Type: String
+    AllowedPattern: '^ssh-ed25519 [A-Za-z0-9+/=]+( .*)?$'
+  DataMode:
+    Type: String
+    Default: restore
+    AllowedValues: [restore, fresh]
+  SourceRevision:
+    Type: String
+    Default: 510cfda533dfd1e96f15ea8e79576ed2ac5cbaf7
+    AllowedPattern: '^[a-f0-9]{40}$'
+    Description: Previously validated integration commit; includes both submodule pins.
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.63.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vpc'
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Ref AvailabilityZone
+      CidrBlock: 10.63.1.0/24
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  SubnetRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SGI-FIIS SSH from one administrator and public HTTPS.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SshCidr
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub '${AWS::StackName}-ssh'
+      PublicKeyMaterial: !Ref SshPublicKey
+  Server:
+    Type: AWS::EC2::Instance
+    DependsOn: [PublicRoute, SubnetRoute]
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: t3.small
+      KeyName: !Ref KeyPair
+      CreditSpecification:
+        CPUCredits: standard
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          SubnetId: !Ref Subnet
+          GroupSet: [!Ref SecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: !Ref RootDeviceName
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            Encrypted: true
+            # Preserve data if the instance/stack is deleted. This disk still incurs usage.
+            DeleteOnTermination: false
+      PropagateTagsToVolumeOnCreation: true
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+        - Key: Project
+          Value: sgi-fiis
+      UserData:
+        Fn::Base64: !Sub |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec > >(tee -a /var/log/sgi-fiis-provision.log) 2>&1
+          apt-get update
+          apt-get install -y git ca-certificates python3
+          app_dir=/home/ubuntu/SGI-FIIS-integration
+          runuser -u ubuntu -- git clone https://github.com/aleborromeo/SGI-FIIS-integration.git "$app_dir"
+          runuser -u ubuntu -- git -C "$app_dir" checkout --detach '${SourceRevision}'
+          runuser -u ubuntu -- git -C "$app_dir" submodule update --init --recursive --depth 1
+          runuser -u ubuntu -- bash "$app_dir/deploy/aws/bootstrap-ubuntu.sh"
+          runuser -u ubuntu -- python3 "$app_dir/deploy/aws/config.py" init --mode '${DataMode}'
+          cd "$app_dir"
+          if [[ '${DataMode}' == fresh ]]; then
+            runuser -u ubuntu -- bash deploy/aws/start.sh --build
+            admin_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+            printf 'admin@unas.edu.pe\n%s\n%s\n' "$admin_password" "$admin_password" | runuser -u ubuntu -- bash deploy/aws/secure-demo.sh --fresh-install
+            umask 077
+            printf '%s\n' "$admin_password" > /home/ubuntu/.sgi-fiis-initial-admin
+            chown ubuntu:ubuntu /home/ubuntu/.sgi-fiis-initial-admin
+            unset admin_password
+          else
+            runuser -u ubuntu -- docker compose --env-file .env.aws -f docker-compose.aws.yml build api
+            runuser -u ubuntu -- docker compose --env-file .env.aws -f docker-compose.aws.yml build web
+            runuser -u ubuntu -- docker compose --env-file .env.aws -f docker-compose.aws.yml up -d --wait db
+          fi
+          echo 'Preparacion terminada. Revisar modo de datos antes de publicar HTTPS.'
+
+Outputs:
+  InstanceId:
+    Value: !Ref Server
+  PublicIp:
+    Value: !GetAtt Server.PublicIp
+  SecurityGroupId:
+    Value: !Ref SecurityGroup
+  DataMode:
+    Value: !Ref DataMode
+  SourceRevision:
+    Value: !Ref SourceRevision

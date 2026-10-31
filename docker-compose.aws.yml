@@ -1,0 +1,112 @@
+name: sgi-fiis-aws
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Falta DB_NAME en .env.aws}
+      POSTGRES_USER: ${DB_USER:?Falta DB_USER en .env.aws}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD en .env.aws}
+    command: [postgres, -c, shared_buffers=64MB, -c, max_connections=40]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    mem_limit: 384m
+    logging: *logging
+
+  api:
+    image: sgi-fiis-api:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deploy/aws/backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "false"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "true"
+      SPRING_JPA_SHOW_SQL: "false"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      SERVER_TOMCAT_THREADS_MAX: "40"
+      STORAGE_LOCAL_ROOT: /app/uploads-fiis
+      JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en .env.aws}
+      APP_FRONTEND_URL: ${PUBLIC_URL:?Falta PUBLIC_URL en .env.aws}
+      APP_MAIL_MOCK: ${APP_MAIL_MOCK:-true}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-localhost}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-dummy-client-id}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-dummy-client-secret}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-common}
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=64m -Xss512k
+    volumes:
+      - uploads_data:/app/uploads-fiis
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS http://127.0.0.1:8080/health | grep -Eq ''"database"[[:space:]]*:[[:space:]]*"CONNECTED"''']
+      start_period: 60s
+      interval: 10s
+      timeout: 5s
+      retries: 18
+    mem_limit: 900m
+    stop_grace_period: 30s
+    logging: *logging
+
+  web:
+    image: sgi-fiis-web:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deploy/aws/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1/healthz]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    mem_limit: 64m
+    logging: *logging
+
+  edge:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Falta SITE_ADDRESS en .env.aws}
+    ports:
+      - ${BIND_ADDRESS:-127.0.0.1}:80:80
+      - ${BIND_ADDRESS:-127.0.0.1}:443:443
+    volumes:
+      - ./deploy/aws/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 96m
+    logging: *logging
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
