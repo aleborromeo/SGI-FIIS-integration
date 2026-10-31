@@ -2,6 +2,8 @@
 
 Esta ruta sustituye la creación manual de EC2 y su red. Usa AWS CLI y una plantilla CloudFormation versionada. Cree primero la cuenta y compruebe su plan/crédito como indica la [guía principal](README.md#1-comprobar-la-cuenta-y-el-crédito).
 
+Los ejemplos usan Ohio (`us-east-2`). Confirme la región asignada al proyecto en AWS Settings antes de crear recursos; en el nuevo modelo de proyectos AWS restringe las operaciones regionales. Si corresponde otra región, indíquela explícitamente con `--region` o `-Region`. Que `DescribeRegions` funcione no demuestra acceso a CloudFormation en esa región. Referencia: [regiones de los proyectos](https://docs.aws.amazon.com/accounts/latest/reference/project-regions.html).
+
 ## Ejecutar desde AWS CloudShell
 
 Abra CloudShell desde la consola de su cuenta AWS. Ya dispone de una sesión autenticada y herramientas de línea de comandos; no necesita escribir claves de acceso en el repositorio. Clone solo el repositorio de integración en CloudShell, sin los submódulos: se descargarán y compilarán en EC2.
@@ -10,13 +12,13 @@ Abra CloudShell desde la consola de su cuenta AWS. Ya dispone de una sesión aut
 aws sts get-caller-identity
 git clone --depth 1 --single-branch --branch codex/aws-ec2-setup https://github.com/aleborromeo/SGI-FIIS-integration.git
 cd SGI-FIIS-integration
-bash deploy/aws/provision.sh --region us-east-1 --mode restore
+bash deploy/aws/provision.sh --region us-east-2 --mode restore
 ```
 
 `restore` prepara Docker, las imágenes y PostgreSQL, y deja pendiente recuperar la base y los documentos anteriores. No inicializa otra base de prueba. Para una instalación nueva sin datos anteriores, el último comando es:
 
 ```bash
-bash deploy/aws/provision.sh --region us-east-1 --mode fresh
+bash deploy/aws/provision.sh --region us-east-2 --mode fresh
 ```
 
 El modo `fresh` inicia la aplicación, desactiva las cuentas que conservan la contraseña pública de la semilla y asigna al administrador una contraseña temporal nueva. La guarda en `/home/ubuntu/.sgi-fiis-initial-admin`, con acceso solo para ese usuario. Se consulta por SSH y se cambia en el primer inicio de sesión; después debe eliminar el archivo con la clave temporal.
@@ -28,7 +30,7 @@ Si ya clonó esta rama antes, actualícela con `git pull --ff-only` en vez de vo
 Si CloudShell sigue bloqueado pero la API de EC2 responde, puede crear el mismo stack desde PowerShell. Instale [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) y autentíquese con credenciales temporales mediante `aws login` (requiere CLI 2.32.0 o posterior):
 
 ```powershell
-aws login --profile sgi --region us-east-1
+aws login --profile sgi --region us-east-2
 ```
 
 Descargue el ZIP de la rama desde GitHub, extráigalo en una carpeta de su usuario y abra PowerShell en esa carpeta. No necesita descargar los submódulos ni compilar la aplicación en su PC; se compilan en EC2. Si tiene Git, también puede clonar la rama como en el ejemplo de CloudShell.
@@ -36,7 +38,7 @@ Descargue el ZIP de la rama desde GitHub, extráigalo en una carpeta de su usuar
 Primero compruebe la sesión, la elegibilidad, la AMI oficial y el permiso de crear una VPC. `-CheckOnly` no genera claves ni crea recursos; la comprobación de permisos usa `--dry-run`:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.ps1 -Profile sgi -Region us-east-1 -CheckOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.ps1 -Profile sgi -Region us-east-2 -CheckOnly
 ```
 
 `ExecutionPolicy Bypass` se limita a ese proceso y no cambia la política del equipo. Revise antes el script descargado. La comprobación previa no garantiza todos los permisos necesarios para crear el stack ni sustituye revisar el plan y el crédito.
@@ -44,7 +46,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.p
 Para crear el entorno y dejar pendiente la recuperación de datos:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.ps1 -Profile sgi -Region us-east-1 -Mode restore
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.ps1 -Profile sgi -Region us-east-2 -Mode restore
 ```
 
 Solo para una instalación nueva, use `-Mode fresh`. El script usa la misma plantilla y versiones de la aplicación que la ruta de CloudShell; crea recursos que consumen crédito. Necesita OpenSSH (`ssh` y `ssh-keygen`, incluidos habitualmente en Windows 10/11) para crear la clave y conectarse. Se permite SSH desde la IPv4 pública detectada de su PC y la clave queda en `%USERPROFILE%\.ssh\sgi-fiis-equipo-aws`, con permisos limitados a su usuario. Si el stack ya existe, se muestran sus datos sin actualizarlo ni regenerar la clave.
@@ -64,7 +66,7 @@ Si EC2 o CloudFormation responden que la cuenta todavía no está activada, ejec
 
 El script consulta la AMI actual en el Parameter Store público de Canonical, comprueba su propietario y arquitectura, y exige que la AMI y `t3.small` estén marcadas como elegibles. Estos controles no sustituyen revisar el saldo ni garantizan coste cero. Los recursos comienzan a consumir crédito al crearse; CloudFormation no añade cargos por gestionar estos recursos nativos de AWS.
 
-La instalación utiliza el commit de integración ya validado `510cfda533dfd1e96f15ea8e79576ed2ac5cbaf7`, con las revisiones fijadas del backend y frontend. El script no actualiza un stack existente: si encuentra el mismo nombre, muestra sus recursos y conserva su clave e instancia. La actualización de la aplicación se hace por SSH con el procedimiento de respaldo de la guía principal.
+La instalación utiliza la revisión de integración fijada en `SourceRevision` de `deploy/aws/ec2.yaml`, con las revisiones fijadas del backend y frontend. El script no actualiza un stack existente: si encuentra el mismo nombre, muestra sus recursos y conserva su clave e instancia. La actualización de la aplicación se hace por SSH con el procedimiento de respaldo de la guía principal.
 
 ## Esperar a que termine Ubuntu
 
@@ -104,8 +106,8 @@ Por defecto se permite SSH desde la IP de la terminal que ejecutó el script. Si
 3. En CloudShell, permita esa IP en el grupo creado. Sustituya `IP_DE_SU_PC`:
 
 ```bash
-SGI_GROUP=$(aws cloudformation describe-stacks --region us-east-1 --stack-name sgi-fiis-equipo --query 'Stacks[0].Outputs[?OutputKey==`SecurityGroupId`].OutputValue | [0]' --output text)
-aws ec2 authorize-security-group-ingress --region us-east-1 --group-id "$SGI_GROUP" --protocol tcp --port 22 --cidr IP_DE_SU_PC/32
+SGI_GROUP=$(aws cloudformation describe-stacks --region us-east-2 --stack-name sgi-fiis-equipo --query 'Stacks[0].Outputs[?OutputKey==`SecurityGroupId`].OutputValue | [0]' --output text)
+aws ec2 authorize-security-group-ingress --region us-east-2 --group-id "$SGI_GROUP" --protocol tcp --port 22 --cidr IP_DE_SU_PC/32
 ```
 
 4. En PowerShell, abra el túnel con la clave descargada:

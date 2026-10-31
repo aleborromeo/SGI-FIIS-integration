@@ -13,7 +13,7 @@ La [guía para desplegar en AWS EC2](deploy/aws/README.md) incluye la preparaci�
 También puede [crear la infraestructura por comandos desde CloudShell o PowerShell](deploy/aws/CLI.md), mediante AWS CLI y la plantilla CloudFormation del repositorio:
 
 ```bash
-bash deploy/aws/provision.sh --region us-east-1 --mode restore
+bash deploy/aws/provision.sh --region us-east-2 --mode restore
 ```
 
 El workflow `Validate AWS deployment` construye las imágenes y comprueba PostgreSQL, la API, el frontend y el inicio de sesión en un entorno temporal. El despliegue anterior de Google Cloud queda disponible únicamente mediante ejecución manual.
