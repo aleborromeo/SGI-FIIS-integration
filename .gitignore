@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+!deploy/aws/.env.aws.example
+backups/
+artifacts/
+*.log
+__pycache__/
+*.pyc

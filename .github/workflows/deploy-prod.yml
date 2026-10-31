@@ -1,9 +1,6 @@
-name: CI/CD SGI-FIIS Production
+name: Legacy Google Cloud deployment (manual)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
