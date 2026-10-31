@@ -22,7 +22,7 @@ Parameters:
     AllowedValues: [restore, fresh]
   SourceRevision:
     Type: String
-    Default: 073dcfed2322f30b24708225befaec5b36af3fe5
+    Default: 485d713390f85893d66c5110ef7c140d068dcf16
     AllowedPattern: '^[a-f0-9]{40}$'
     Description: Previously validated integration commit; includes both submodule pins.
 
