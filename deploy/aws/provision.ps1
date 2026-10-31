@@ -141,7 +141,7 @@ $parameters = @($values.GetEnumerator() | ForEach-Object { @{ ParameterKey = $_.
 $parameterFile = Join-Path ([IO.Path]::GetTempPath()) ("sgi-fiis-" + [Guid]::NewGuid().ToString('N') + '.json')
 try {
     [IO.File]::WriteAllText($parameterFile, ($parameters | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding($false)))
-    Write-Host "Creando $StackName: una t3.small, disco cifrado gp3 de 30 GiB y una IPv4 publica."
+    Write-Host "Creando ${StackName}: una t3.small, disco cifrado gp3 de 30 GiB y una IPv4 publica."
     Write-Host 'Consumen credito AWS. El disco se conserva al eliminar la instancia y sigue consumiendo recursos.'
     $null = Invoke-SgiAws -AwsArguments @('cloudformation', 'create-stack', '--stack-name', $StackName, '--template-body', "file://$templatePath", '--parameters', "file://$parameterFile", '--tags', 'Key=Project,Value=sgi-fiis', '--output', 'json')
     $null = Invoke-SgiAws -AwsArguments @('cloudformation', 'wait', 'stack-create-complete', '--stack-name', $StackName)
