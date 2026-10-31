@@ -135,7 +135,9 @@ try {
         & $scriptPath @options
         Assert-True $global:SgiFakeCreated 'The simulated stack should be created.'
         $params = @{}
-        $global:SgiFakeParameters | ConvertFrom-Json | ForEach-Object { $params[$_.ParameterKey] = $_.ParameterValue }
+        foreach ($parameter in ($global:SgiFakeParameters | ConvertFrom-Json)) {
+            $params[$parameter.ParameterKey] = $parameter.ParameterValue
+        }
         Assert-True ($params.DataMode -eq 'restore') 'Restore must be the default.'
         Assert-True ($params.SshPublicKey -match '^ssh-ed25519 ') 'Only an ed25519 public key should be imported.'
         Assert-True ($global:SgiFakeParameters -notmatch 'PRIVATE KEY') 'Private material must not be sent to AWS.'
@@ -148,7 +150,8 @@ try {
     }
     Test-Case 'fresh requires an explicit mode' {
         & $scriptPath @options -Mode fresh
-        $mode = @($global:SgiFakeParameters | ConvertFrom-Json | Where-Object { $_.ParameterKey -eq 'DataMode' })[0].ParameterValue
+        $parsed = $global:SgiFakeParameters | ConvertFrom-Json
+        $mode = @($parsed | Where-Object { $_.ParameterKey -eq 'DataMode' })[0].ParameterValue
         Assert-True ($mode -eq 'fresh') 'Explicit fresh mode must be forwarded.'
     }
 } finally {
