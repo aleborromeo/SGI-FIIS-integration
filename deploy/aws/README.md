@@ -22,7 +22,7 @@ En **EC2 → Launch instance**, configure:
 
 | Campo | Valor para esta guía |
 |---|---|
-| Región | US East (N. Virginia), `us-east-1` |
+| Región | La asignada al proyecto en AWS Settings; en el nuevo modelo, para Perú suele ser Ohio, `us-east-2` |
 | Nombre | `sgi-fiis-equipo` |
 | AMI | Ubuntu Server 24.04 LTS, x86_64, imagen oficial elegible de Canonical |
 | Tipo | `t3.small`, 2 GiB de RAM, si la consola confirma elegibilidad y crédito |
@@ -184,6 +184,18 @@ El arranque público se detiene si siguen existiendo cuentas activas con la cont
 Caddy solicita y renueva el certificado y redirige HTTP a HTTPS. Compruebe la URL desde otra red y repita las pruebas de login y documentos. Referencia: https://caddyserver.com/docs/automatic-https . Mientras no tenga dominio, puede seguir probando con el túnel SSH. No se publica el inicio de sesión mediante HTTP abierto.
 
 ## 7. Acceso del equipo y correo
+
+### URL temporal para las pruebas
+
+Puede usar un nombre de [sslip.io o nip.io](https://nip.io/) que incluya la IPv4 pública del servidor, por ejemplo `sgi-fiis.3-142-235-156.sslip.io`. El servicio DNS resuelve esa IP sin registrar un dominio propio y admite certificados TLS por ACME. Compruebe antes que el nombre resuelva a la IP actual de su EC2; la disponibilidad del DNS depende del proveedor.
+
+En `.env.aws`, cambie únicamente `PUBLIC_URL`, `SITE_ADDRESS` y `BIND_ADDRESS` como en el apartado anterior y ejecute `bash deploy/aws/start.sh`. Caddy necesita los puertos 80 y 443 accesibles desde Internet. Compruebe `https://SU_NOMBRE/health` desde otro equipo: `database` debe indicar `CONNECTED`. La URL queda vinculada a la IP; si la IP cambia al detener y arrancar EC2, también debe cambiar el nombre configurado y comunicado al equipo.
+
+### Cuentas para probar distintos roles
+
+Entre con el administrador y abra `/users/create`. Cree una cuenta por integrante con correo institucional `.edu.pe` y el rol que necesita probar. El formulario exige un grupo de investigación para usuarios que no sean administradores; puede usar un grupo de prueba existente. Al crear la cuenta, copie la contraseña temporal que muestra el formulario y entréguela a su destinatario; debe cambiarla al iniciar sesión.
+
+El backend fijado por esta rama incluye la corrección de entrega de la contraseña temporal: antes la contraseña se perdía al convertir el usuario guardado de nuevo al modelo de dominio. La validación comprueba creación de cuenta, contraseña temporal y login con PostgreSQL real, además de una prueba específica del mapeo. La clave temporal no se almacena como texto en la base.
 
 Comparta la URL y cree una cuenta individual para cada integrante con su rol. Los usuarios de la aplicación no necesitan acceder a AWS ni recibir su clave `.pem`. Para mantenimiento, use una clave SSH individual por administrador; las claves públicas se agregan a `~/.ssh/authorized_keys` y sus IP a la regla 22. El acceso a la consola AWS se asigna con identidades individuales y permisos limitados, sin compartir la cuenta raíz ni desactivar MFA.
 

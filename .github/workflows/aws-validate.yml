@@ -8,6 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  user-credentials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: backend/fiis/pom.xml
+      - name: Verify temporary password survives persistence mapping
+        run: mvn -B -f backend/fiis/pom.xml -Dtest=CreateUserUseCaseTest test
   windows-provision:
     runs-on: windows-latest
     timeout-minutes: 10
@@ -79,8 +94,29 @@ jobs:
                             data=json.dumps({'email': 'admin@unas.edu.pe', 'password': os.environ['TEST_PASSWORD']}).encode(),
                             headers={'Content-Type': 'application/json'})
           with urlopen(request, timeout=20) as response:
-              assert json.load(response).get('token')
+              admin = json.load(response)
+              assert admin.get('token')
           print('Login con la nueva clave temporal comprobado.')
+          headers = {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + admin['token']}
+          create = Request('http://localhost/api/v1/users',
+                           data=json.dumps({'dni': '99112233', 'firstNames': 'QA', 'lastNames': 'Credentials',
+                                            'institutionalEmail': 'qa.credentials@unas.edu.pe',
+                                            'roleCode': 'EVALUADOR'}).encode(), headers=headers)
+          with urlopen(create, timeout=20) as response:
+              assert response.status == 201
+              created = json.load(response)
+          temporary = created.get('temporaryPassword')
+          assert temporary and temporary != '99112233', 'Falta la clave temporal del nuevo usuario'
+          login = Request('http://localhost/api/v1/auth/login',
+                          data=json.dumps({'email': created['institutionalEmail'], 'password': temporary}).encode(),
+                          headers={'Content-Type': 'application/json'})
+          with urlopen(login, timeout=20) as response:
+              session = json.load(response)
+              assert session.get('token') and session.get('mustChangePassword') is True
+          get_user = Request('http://localhost/api/v1/users/' + str(created['id']), headers=headers)
+          with urlopen(get_user, timeout=20) as response:
+              assert not json.load(response).get('temporaryPassword'), 'La clave temporal no debe persistirse'
+          print('Alta, entrega de clave temporal y login del evaluador comprobados con PostgreSQL real.')
           PY
       - name: Verify backup and restore into separate volumes
         run: |
