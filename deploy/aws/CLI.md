@@ -23,6 +23,36 @@ El modo `fresh` inicia la aplicación, desactiva las cuentas que conservan la co
 
 Si ya clonó esta rama antes, actualícela con `git pull --ff-only` en vez de volver a clonar. Tras integrar el PR, se podrá obtener la configuración desde `main`.
 
+## Ejecutar desde Windows sin CloudShell
+
+Si CloudShell sigue bloqueado pero la API de EC2 responde, puede crear el mismo stack desde PowerShell. Instale [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) y autentíquese con credenciales temporales mediante `aws login` (requiere CLI 2.32.0 o posterior):
+
+```powershell
+aws login --profile sgi --region us-east-1
+```
+
+Descargue el ZIP de la rama desde GitHub, extráigalo en una carpeta de su usuario y abra PowerShell en esa carpeta. No necesita descargar los submódulos ni compilar la aplicación en su PC; se compilan en EC2. Si tiene Git, también puede clonar la rama como en el ejemplo de CloudShell.
+
+Primero compruebe la sesión, la elegibilidad, la AMI oficial y el permiso de crear una VPC. `-CheckOnly` no genera claves ni crea recursos; la comprobación de permisos usa `--dry-run`:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.ps1 -Profile sgi -Region us-east-1 -CheckOnly
+```
+
+`ExecutionPolicy Bypass` se limita a ese proceso y no cambia la política del equipo. Revise antes el script descargado. La comprobación previa no garantiza todos los permisos necesarios para crear el stack ni sustituye revisar el plan y el crédito.
+
+Para crear el entorno y dejar pendiente la recuperación de datos:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy\aws\provision.ps1 -Profile sgi -Region us-east-1 -Mode restore
+```
+
+Solo para una instalación nueva, use `-Mode fresh`. El script usa la misma plantilla y versiones de la aplicación que la ruta de CloudShell; crea recursos que consumen crédito. Necesita OpenSSH (`ssh` y `ssh-keygen`, incluidos habitualmente en Windows 10/11) para crear la clave y conectarse. Se permite SSH desde la IPv4 pública detectada de su PC y la clave queda en `%USERPROFILE%\.ssh\sgi-fiis-equipo-aws`, con permisos limitados a su usuario. Si el stack ya existe, se muestran sus datos sin actualizarlo ni regenerar la clave.
+
+Al finalizar, ejecute el comando SSH que muestra el script para esperar a `cloud-init`; después abra el túnel que muestra para acceder a `http://localhost:8080`. Como creó el entorno desde su PC, no necesita descargar una clave desde CloudShell ni añadir la IP de CloudShell al grupo de seguridad.
+
+Si EC2 o CloudFormation responden que la cuenta todavía no está activada, ejecutar la CLI local no elimina ese bloqueo. Si recibe `AccessDenied` o `UnauthorizedOperation`, revise los permisos de su identidad. Los problemas persistentes de activación se tramitan con [AWS Support](https://console.aws.amazon.com/support/) en Cuenta y facturación. Referencias: [inicio de sesión local](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html) y [comprobación sin crear una VPC](https://docs.aws.amazon.com/cli/latest/reference/ec2/create-vpc.html).
+
 ## Qué crea el comando
 
 - Una VPC, subred pública, Internet Gateway y ruta; no requiere una VPC predeterminada.

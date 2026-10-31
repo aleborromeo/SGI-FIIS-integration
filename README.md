@@ -10,7 +10,7 @@ git submodule status
 
 La [guía para desplegar en AWS EC2](deploy/aws/README.md) incluye la preparación de la cuenta, instalación, recuperación de datos, acceso del equipo, HTTPS, copias de respaldo y actualización del sistema. La configuración inicial escucha solo en localhost; se comprueba por un túnel SSH antes de publicarla.
 
-También puede [crear la infraestructura por comandos desde CloudShell](deploy/aws/CLI.md), mediante AWS CLI y la plantilla CloudFormation del repositorio:
+También puede [crear la infraestructura por comandos desde CloudShell o PowerShell](deploy/aws/CLI.md), mediante AWS CLI y la plantilla CloudFormation del repositorio:
 
 ```bash
 bash deploy/aws/provision.sh --region us-east-1 --mode restore

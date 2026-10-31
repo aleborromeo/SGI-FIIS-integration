@@ -8,6 +8,17 @@ permissions:
   contents: read
 
 jobs:
+  windows-provision:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Windows PowerShell 5.1 provisioning without AWS
+        shell: powershell
+        run: ./tests/test_aws_provision.ps1
+      - name: Verify PowerShell 7 provisioning without AWS
+        shell: pwsh
+        run: ./tests/test_aws_provision.ps1
   infrastructure:
     runs-on: ubuntu-latest
     timeout-minutes: 10
