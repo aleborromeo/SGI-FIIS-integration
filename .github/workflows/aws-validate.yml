@@ -21,8 +21,8 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: backend/fiis/pom.xml
-      - name: Verify temporary password survives persistence mapping
-        run: mvn -B -f backend/fiis/pom.xml -Dtest=CreateUserUseCaseTest test
+      - name: Verify user credentials and deployment URL in welcome emails
+        run: mvn -B -f backend/fiis/pom.xml -Dtest=CreateUserUseCaseTest,EmailSenderAdapterTest test
   windows-provision:
     runs-on: windows-latest
     timeout-minutes: 10
@@ -46,6 +46,7 @@ jobs:
           cfn-lint deploy/aws/ec2.yaml
           bash -n deploy/aws/provision.sh
           python3 -m unittest discover -s tests -p 'test_aws_provision.py'
+          python3 -m unittest discover -s tests -p 'test_configure_mail.py'
   build-and-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30

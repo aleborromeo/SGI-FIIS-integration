@@ -201,7 +201,28 @@ Comparta la URL y cree una cuenta individual para cada integrante con su rol. Lo
 
 El modo inicial `APP_MAIL_MOCK=true` permite comprobar el servidor, pero no envía correos de registro, verificación o recuperación. Para probar esas funciones complete en `.env.aws` el SMTP existente del proyecto, su contraseña de aplicación y `APP_MAIL_FROM`, y cambie `APP_MAIL_MOCK=false`. Al aplicar el cambio, recree la API con `start.sh`.
 
-Hay un enlace `http://localhost:5173/login` escrito directamente en `EmailSenderAdapter.java` del backend fijado. Debe sustituirse en el backend por el valor configurable de `APP_FRONTEND_URL` antes de utilizar los correos de alta como flujo final para el equipo. Las variables Azure por sí solas tampoco acreditan que SSO funcione: si utilizará Microsoft, valide la implementación y registre los redirect URI de la URL HTTPS en Entra ID. La prueba básica de este despliegue utiliza autenticación local.
+El correo de bienvenida usa `APP_FRONTEND_URL`, tomado de `PUBLIC_URL`, para dirigir al login del entorno desplegado. Las variables Azure por sí solas no acreditan que SSO funcione: si utilizará Microsoft, valide la implementación y registre los redirect URI de la URL HTTPS en Entra ID. La prueba básica de este despliegue utiliza autenticación local.
+
+### Configurar Gmail personal para las pruebas
+
+Active la verificación en dos pasos de Google y cree una [contraseña de aplicación](https://myaccount.google.com/apppasswords) llamada `SGI-FIIS`. La cuenta debe permitir esta función. Referencia: [documentación de Google](https://support.google.com/accounts/answer/185833?hl=es).
+
+Dentro de la sesión SSH de Ubuntu, ejecute:
+
+```bash
+python3 deploy/aws/configure_mail.py gmail
+bash deploy/aws/start.sh
+```
+
+El asistente pide la cuenta personal Gmail y la contraseña de aplicación con entrada oculta. Comprueba TLS y autenticación con `smtp.gmail.com:587` antes de guardar; si falla, conserva la configuración anterior. Modifica solo las opciones del correo, mantiene el archivo privado y conserva los secretos de la base de datos, JWT y la URL. La comprobación no envía mensajes. La API aplica el cambio al ejecutar `start.sh`; si también actualizó el backend, use `start.sh --build`.
+
+Puede repetir la comprobación sin cambiar la configuración:
+
+```bash
+python3 deploy/aws/configure_mail.py check
+```
+
+Para verificar la entrega real, cree desde el administrador un usuario de prueba con una dirección institucional que usted controle y compruebe la recepción de las credenciales y el enlace HTTPS. Luego pruebe la recuperación de contraseña con esa misma cuenta. La recepción real no se acredita únicamente con la conexión SMTP ni con los mensajes del registro del servidor. Revise Spam si el mensaje no aparece. Guarde la contraseña de aplicación únicamente en el servidor; no la suba al repositorio ni la publique en el chat.
 
 ## 8. Respaldos y actualizaciones
 
